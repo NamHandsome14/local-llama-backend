@@ -1,0 +1,12 @@
+# Virtual environment
+venv/
+
+# Local models (GGUF)
+models/*.gguf
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
