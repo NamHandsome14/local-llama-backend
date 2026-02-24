@@ -2,6 +2,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatBox = document.getElementById('chat-box');
     const userInput = document.getElementById('user-input');
     const sendBtn = document.getElementById('send-btn');
+    
+    // Generate a session ID for this tab
+    const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
+    
+    // Chat history storage
+    let conversationHistory = [];
 
     // Focus input on load
     userInput.focus();
@@ -13,28 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         messageDiv.textContent = text;
         chatBox.appendChild(messageDiv);
         scrollToBottom();
-    }
-
-    // Function to add a typing indicator
-    function addTypingIndicator() {
-        const typingDiv = document.createElement('div');
-        typingDiv.classList.add('message', 'ai', 'typing-indicator');
-        typingDiv.id = 'typing-indicator';
-        typingDiv.innerHTML = `
-            <span></span>
-            <span></span>
-            <span></span>
-        `;
-        chatBox.appendChild(typingDiv);
-        scrollToBottom();
-    }
-
-    // Function to remove typing indicator
-    function removeTypingIndicator() {
-        const typingDiv = document.getElementById('typing-indicator');
-        if (typingDiv) {
-            typingDiv.remove();
-        }
+        return messageDiv;
     }
 
     function scrollToBottom() {
@@ -54,44 +39,63 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = userInput.value.trim();
         if (!text) return;
 
-        // 1. Add User Message
+        // 1. Add User Message to UI and History
         addMessage(text, 'user');
+        conversationHistory.push({ role: "user", content: text });
         
         // 2. Clear input and disable
         userInput.value = '';
         setInputState(false);
 
-        // 3. Show typing indicator
-        addTypingIndicator();
+        // 3. Create AI message bubble immediately
+        const messageDiv = addMessage('', 'ai');
+        let fullResponse = "";
 
         try {
             // 4. Call Backend API
-            const response = await fetch('http://localhost:8000/ask', {
+            const response = await fetch('http://localhost:8000/chat/stream', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    question: text
+                    messages: conversationHistory,
+                    session_id: sessionId
                 })
             });
 
             if (!response.ok) {
-                throw new Error(`Server error: ${response.status}`);
+                const errText = await response.text();
+                throw new Error(`Server error: ${response.status} - ${errText}`);
             }
 
-            const data = await response.json();
+            // 5. Handle Streaming Response
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                if (chunk) {
+                    fullResponse += chunk;
+                    messageDiv.textContent = fullResponse;
+                    scrollToBottom();
+                }
+            }
 
-            // 5. Remove typing indicator and show response
-            removeTypingIndicator();
-            addMessage(data.answer, 'ai');
+            // 6. Add AI response to history
+            conversationHistory.push({ role: "assistant", content: fullResponse });
 
         } catch (error) {
             console.error('Error:', error);
-            removeTypingIndicator();
-            addMessage(`Error: Could not connect to the AI. ${error.message}`, 'ai error');
+            messageDiv.classList.add('error');
+            messageDiv.textContent = `Error: ${error.message}`;
+            // Remove failed user message from history so we can retry? 
+            // Or just keep it. For now, we leave it.
         } finally {
-            // 6. Re-enable input
+            // 7. Re-enable input
             setInputState(true);
         }
     }

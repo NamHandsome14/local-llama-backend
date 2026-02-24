@@ -51,7 +51,7 @@ Ví dụ cấu hình trong code:
 MODEL_PATH = "models/llama-2-7b-chat.Q4_K_M.gguf"
 
 # Chạy ứng dụng
-uvicorn app:app --reload
+uvicorn main:app --reload
 
 Sau khi chạy, truy cập:
 
